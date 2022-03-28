@@ -1,6 +1,10 @@
 // Sai Kiran Lade
 // University of Florida
 
+TODO:
+// comments need to be added
+// check refresh execution in fsm
+
 module dram_controller #
   (
     parameter   integer NUMBER_OF_COLUMNS = 8,
@@ -20,10 +24,10 @@ module dram_controller #
     parameter integer REFRESH_COUNTER_WIDTH = $clog2(CYCLES_BETWEEN_REFRESH)
   )
   (
-    //host interface
+    //user interface
+	input						  u_en, //enable for controller
     input                         u_rst_n, //reset, active low
     input                         u_clk, //input clock
-	input						  u_en, //enable for controller
     input   [U_ADDR_WIDTH-1:0]    u_addr, //address
     input   [U_DATA_WIDTH-1:0]    u_data_i, //write data
     input                         u_cmd, //command for controller
@@ -89,6 +93,7 @@ module dram_controller #
 	assign dram_cas_n = cas_n;
 	assign dram_we_n = we_n;
 	assign dram_clk_en = clk_en; //########## INSPECTION REQUIRED ###############
+	assign u_busy = (state == IDLE) ? 1'b0 : 1'b1;
 
     //sampling input data
     always@ (posedge u_clk) begin
