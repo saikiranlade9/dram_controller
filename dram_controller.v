@@ -25,7 +25,6 @@ module dram_controller #
   )
   (
     //user interface
-	input						  u_en, //enable for controller
     input                         u_rst_n, //reset, active low
     input                         u_clk, //input clock
     input   [U_ADDR_WIDTH-1:0]    u_addr, //address
@@ -35,6 +34,7 @@ module dram_controller #
     output                        u_data_valid, //valid flag for read data
     output                        u_cmd_ack, //acknowledge signal for commands
     output                        u_busy,
+	input						  u_en, //enable dram controller
 
     //dram interface
     input   [DRAM_DATA_WIDTH-1:0]   dram_rd_data, 
