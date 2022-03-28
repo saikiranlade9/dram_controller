@@ -70,8 +70,25 @@ module dram_controller #
 
 	reg [NUMBER_OF_BANKS-1:0]		open_row_r;
 	reg [ROW_WIDTH-1:0]				active_row_r[0:NUMBER_OF_BANKS-1];
+	
+	
+   
+    reg                          cs_n; //chip select
+    reg                          ras_n; //RAS command
+    reg                          cas_n; //CAS command
+    reg                          we_n; //WE command
+    reg                          clk_en;
     
     assign u_cmd_ack = u_cmd_ack_r;
+	
+	assign dram_wr_data = u_data_i_r;
+	assign dram_addr = (state_r == S_READ) or (state == S_WRITE) ? column_addr_r : row_addr_r;
+	assign dram_bank_id = bank_id_r;
+	assign dram_cs_n = cs_n; 
+	assign dram_ras_n = ras_n;
+	assign dram_cas_n = cas_n;
+	assign dram_we_n = we_n;
+	assign dram_clk_en = clk_en; //########## INSPECTION REQUIRED ###############
 
     //sampling input data
     always@ (posedge u_clk) begin
@@ -152,47 +169,79 @@ module dram_controller #
 					end
 				end
 			end
+			
 			S_PRECHARGE: begin
-				
+				if(target_state_r == S_REFRESH) next_state = S_REFRESH; //closing a row to perform refresh
+				else next_state = S_ACTIVATE; //closing a row to open another
 			end
+			
+			S_ACTIVATE: next_state = target_state_r; //activate rows for read or write operation
+			
+			S_WRITE: next_state = S_IDLE;
+			
+			S_READ: next_state = S_IDLE;
+			
+			S_REFRESH: next_state = IDLE; //########### INSPECTION REQUIRED #####################
+		endcase
 	end
 	
-		
-		
-
-    always@ (posedge clk) begin
-      if(rst_n == 1'b0) begin
-        state_r <= S_INIT;
-        //#######################
-        //initialize misc registers
-        //#######################
-      end
-      else begin
-        state_r <= next_state;
-        //#######################
-        //assign next state logic values for each register
-        //#######################
-      end
-    end
+	//Track active rows
+	always@ (posedge u_clk) begin
+		if(!rst_n) begin
+			open_row_r <= '0;
+			for(int i=0; i<NUMBER_OF_BANKS; i++)
+				active_row_r[i] <= '0;
+		end
+		else begin
+			case(state_r) 
+				S_ACTIVATE: begin
+					active_row_r[bank_id_r] <= row_addr_r;
+					open_row_r[bank_id_r] <= 1'b1;
+				end
+				S_PRECHARGE: begin
+					if(target_state_r == S_REFRESH)	open_row_r <= '0; //close all banks
+					else open_row_r[bank_id_r] <= 1'b0; // close that particular bank					
+				end
+			endcase
+		end
+	end
+	
+	
+	
     
-    //logic for next states
+    //send appropriate commands
     always@ * begin
-      case(state) 
+		clk_en	= 1'b1;
+		cs_n	= 1'b0;
+		ras_n	= 1'b1;
+		cas_n	= 1'b1;
+		we_n	= 1'b1;
+		case(state_r)
+			S_IDLE: begin
+				//############## INSPECTION REQUIRED #############
+			end
+			
+			S_PRECHARGE: begin
+				ras_n = 1'b0;
+				we_n = 1'b0;
+			end
+			
+			S_ACTIVATE: ras_n = 1'b0;
+			
+			S_WRITE: begin
+				cas_n = 1'b0;
+				we_n = 1'b0;
+			end
+			
+			S_READ: cas_n = 1'b0;
+			
+			S_REFRESH: begin
+				ras_n = 1'b0;
+				cas_n = 1'b0;
+			end
+		endcase
+	  
     end
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 endmodule
