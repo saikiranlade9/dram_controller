@@ -5,21 +5,21 @@
 module dram_controller #
   (
 	//Given Specification
-    parameter   integer NUMBER_OF_COLUMNS = 8, //############## Need to check with TAs ##############
+    parameter   integer NUMBER_OF_COLUMNS = 8,
     parameter   integer NUMBER_OF_ROWS = 128,
-    parameter   integer NUMBER_OF_BANKS = 8, // ############## Need to check with TAs ##############
+    parameter   integer NUMBER_OF_BANKS = 8, 
     parameter   integer REFRESH_RATE = 125, // ms
-    parameter   integer CLK_FREQUENCY = 10, //MHz ######## Need to check with TAs ##############
+    parameter   integer CLK_FREQUENCY = 100, //KHz 
     parameter   integer U_DATA_WIDTH = 8,
-    parameter   integer DRAM_DATA_WIDTH = 8, // ############## Need to check with TAs ##############
+    parameter   integer DRAM_DATA_WIDTH = 2, 
 	
 	//deduced from the given spec
 	//DONOT pass values to the following parameters while declaring the module.
-    parameter integer COLUMN_WIDTH = $clog2(NUMBER_OF_COLUMNS), //bits required to accommodate coulmn addresses
+    parameter integer COLUMN_WIDTH = $clog2(NUMBER_OF_COLUMNS/DRAM_DATA_WIDTH), //bits required to accommodate coulmn addresses
     parameter integer ROW_WIDTH = $clog2(NUMBER_OF_ROWS), //bits required to accommodate rows addresses
     parameter integer BANK_ID_WIDTH = $clog2(NUMBER_OF_BANKS), //bits required to accommodate bank id
     parameter integer U_ADDR_WIDTH = BANK_ID_WIDTH + ROW_WIDTH + COLUMN_WIDTH, // address format : <bank_id, row_address, col_address>
-    parameter integer CYCLES_BETWEEN_REFRESH = $floor(CLK_FREQUENCY*REFRESH_RATE/1000), // number of clock cycles between consecutive refreshes
+    parameter integer CYCLES_BETWEEN_REFRESH = $floor(CLK_FREQUENCY*REFRESH_RATE/1000), // number of clock cycles between consecutive refreshes //changes
     parameter integer DRAM_ADDR_WIDTH = ROW_WIDTH > COLUMN_WIDTH ? ROW_WIDTH : COLUMN_WIDTH, // since either column address or row address is sent at a time, dram address width = max(row_width, column_width)
     parameter integer REFRESH_COUNTER_WIDTH = $clog2(CYCLES_BETWEEN_REFRESH) // bits required to accommodate cycles_between_refresh
   )
@@ -58,6 +58,7 @@ module dram_controller #
               S_WRITE     = 3'h3,
               S_READ      = 3'h4,
               S_REFRESH   = 3'h5;
+			  
     //I/O registers
              
     reg [REFRESH_COUNTER_WIDTH-1:0] refresh_count_r; // register to store cycles count between refreshes
@@ -100,7 +101,7 @@ module dram_controller #
 	assign dram_ras_n = ras_n;
 	assign dram_cas_n = cas_n;
 	assign dram_we_n = we_n;
-	assign dram_clk_en = u_en ? clk_en : 1'b0; // clk enable = 0 when dram controller is disabled  ########## INSPECTION REQUIRED ###############
+	assign dram_clk_en = (u_en) ? clk_en : 1'b0; // clk enable = 0 when dram controller is disabled  ########## INSPECTION REQUIRED ###############
 	assign u_busy = (state_r == S_IDLE) ? 1'b0 : 1'b1; 
 	assign dram_addr = dram_addr_w;
 
@@ -195,7 +196,7 @@ module dram_controller #
 						if(u_cmd)	next_target_state = S_WRITE;
 						else	next_target_state = S_READ;
 					end
-					else begin // when row buffers are empty
+					else begin // when row buffer is empty
 						next_state = S_ACTIVATE;
 						if(u_cmd)	next_target_state = S_WRITE;
 						else	next_target_state = S_READ;
