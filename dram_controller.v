@@ -14,6 +14,7 @@ module dram_controller #
     parameter   integer DRAM_DATA_WIDTH = 8, // ############## Need to check with TAs ##############
 	
 	//deduced from the given spec
+	//DONOT pass values to the following parameters while declaring the module.
     parameter integer COLUMN_WIDTH = $clog2(NUMBER_OF_COLUMNS), //bits required to accommodate coulmn addresses
     parameter integer ROW_WIDTH = $clog2(NUMBER_OF_ROWS), //bits required to accommodate rows addresses
     parameter integer BANK_ID_WIDTH = $clog2(NUMBER_OF_BANKS), //bits required to accommodate bank id
@@ -48,7 +49,7 @@ module dram_controller #
     output                          dram_we_n, //WE(write enable) command
     output                          dram_clk_en // clk enable
   );
-
+	
     localparam
               STATE_WIDTH = 3,
               S_IDLE      = 3'h0, 
@@ -89,6 +90,7 @@ module dram_controller #
 	
 	reg	[U_DATA_WIDTH-1:0]		 u_data_o_r; //read data is sampled in this register
 	
+	reg	[DRAM_ADDR_WIDTH-1:0]	dram_addr_w;
 	
     assign u_cmd_ack = u_cmd_ack_r;
 	
@@ -98,28 +100,29 @@ module dram_controller #
 	assign dram_ras_n = ras_n;
 	assign dram_cas_n = cas_n;
 	assign dram_we_n = we_n;
-	assign dram_clk_en = u_en ? clk_en : 1'b0; = 0 // clk enable = 0 when dram controller is disabled  ########## INSPECTION REQUIRED ###############
-	assign u_busy = (state == IDLE) ? 1'b0 : 1'b1; 
+	assign dram_clk_en = u_en ? clk_en : 1'b0; // clk enable = 0 when dram controller is disabled  ########## INSPECTION REQUIRED ###############
+	assign u_busy = (state_r == S_IDLE) ? 1'b0 : 1'b1; 
+	assign dram_addr = dram_addr_w;
 
 	assign u_data_valid = u_data_valid_r;
 	assign u_data_o = u_data_o_r;
 	
 	always@ * begin
-		dram_addr = column_addr_r;
+		dram_addr_w = column_addr_r;
 		case(state_r)
-			S_PRECHARGE: dram_addr = active_row_r[bank_id_r];  //load the address of existing data in row buffer.
+			S_PRECHARGE: dram_addr_w = active_row_r[bank_id_r];  //load the address of existing data in row buffer.
 			
-			S_ACTIVATE: dram_addr = row_addr_r;
+			S_ACTIVATE: dram_addr_w = row_addr_r;
 			
-			S_WRITE: dram_addr = column_addr_r;
+			S_WRITE: dram_addr_w = column_addr_r;
 			
-			S_READ: dram_addr = column_addr_r;
+			S_READ: dram_addr_w = column_addr_r;
 		endcase
 	end
 
     //sampling input data
     always@ (posedge u_clk) begin
-      if(!rst_n) begin
+      if(!u_rst_n) begin
         column_addr_r <= '0;
         row_addr_r <= '0;
         bank_id_r <= '0;
@@ -127,8 +130,8 @@ module dram_controller #
         u_cmd_ack_r <= '0;
         u_data_i_r <= '0;
       end
-      else if((state_r == IDLE) && (u_en == 1'b1)) begin
-        column_addr_r <= {(ROW_WIDTH-COLUMN_WIDTH){1'b0}, u_addr[COLUMN_WIDTH-1:0]};
+      else if((state_r == S_IDLE) && (u_en == 1'b1)) begin
+        column_addr_r <= {{(ROW_WIDTH-COLUMN_WIDTH){1'b0}}, u_addr[COLUMN_WIDTH-1:0]};
         row_addr_r <= u_addr[ROW_WIDTH+COLUMN_WIDTH-1:COLUMN_WIDTH];
         bank_id_r <= u_addr[U_ADDR_WIDTH-1:U_ADDR_WIDTH-BANK_ID_WIDTH];
         u_cmd_r <= u_cmd; //1 implies WRITE operation 0 implies READ operation
@@ -140,7 +143,7 @@ module dram_controller #
 
     //refresh_logic
     always@ (posedge u_clk) begin
-      if(!rst_n) begin
+      if(!u_rst_n) begin
         refresh_count_r <= REFRESH_COUNTER_WIDTH'(CYCLES_BETWEEN_REFRESH);
         refresh_request_r <= '0;
       end
@@ -151,7 +154,7 @@ module dram_controller #
           refresh_request_r <= '1;
         end
         else  begin
-          refresh_count_r--;
+          refresh_count_r <= refresh_count_r - 1'b1;
           refresh_request_r <= '0;
         end
       end
@@ -159,7 +162,7 @@ module dram_controller #
 
 	//Update state and target states
     always@ (posedge u_clk) begin
-	  if(!rst_n) begin
+	  if(!u_rst_n) begin
 		state_r <= S_IDLE;
 		target_state_r <= S_IDLE;
 	  end
@@ -215,12 +218,14 @@ module dram_controller #
 		endcase
 	end
 	
+	integer i;
 	//Track active rows
 	always@ (posedge u_clk) begin
-		if(!rst_n) begin
+		if(!u_rst_n) begin
 			open_row_r <= '0;
-			for(int i=0; i<NUMBER_OF_BANKS; i++)
+			for (i=0; i<NUMBER_OF_BANKS; i = i+1) begin
 				active_row_r[i] <= '0;
+			end
 		end
 		else begin
 			case(state_r) 
@@ -274,9 +279,9 @@ module dram_controller #
     end
 	
 	//sampling read data and sending it user through u_data_o
-	always@ (posedge clk) begin
-		if(!rst_n) begin
-			u_data_o_r <= '0
+	always@ (posedge u_clk) begin
+		if(!u_rst_n) begin
+			u_data_o_r <= '0;
 			u_data_valid_r <= 1'b0;
 			read_flag <= 1'b0;
 		end
