@@ -1,14 +1,11 @@
 // Sai Kiran Lade
 // University of Florida
 
-TODO:
-// comments need to be added
-// check refresh execution in fsm
 
 module dram_controller #
   (
 	//Given Specification
-    parameter   integer NUMBER_OF_COLUMNS = 8,
+    parameter   integer NUMBER_OF_COLUMNS = 8, //############## Need to check with TAs ##############
     parameter   integer NUMBER_OF_ROWS = 128,
     parameter   integer NUMBER_OF_BANKS = 8, // ############## Need to check with TAs ##############
     parameter   integer REFRESH_RATE = 125, // ms
@@ -87,8 +84,10 @@ module dram_controller #
     reg                          we_n; //WE command
     reg                          clk_en;
     
+	// registers used to realize data_valid flag logic
 	reg							 read_flag, u_data_valid_r;
-	reg	[U_DATA_WIDTH-1:0]		 u_data_o_r;
+	
+	reg	[U_DATA_WIDTH-1:0]		 u_data_o_r; //read data is sampled in this register
 	
 	
     assign u_cmd_ack = u_cmd_ack_r;
@@ -249,7 +248,7 @@ module dram_controller #
 		we_n	= 1'b1;
 		case(state_r)
 			S_IDLE: begin
-				//############## INSPECTION REQUIRED #############
+				//do nothing
 			end
 			
 			S_PRECHARGE: begin
@@ -282,7 +281,7 @@ module dram_controller #
 			read_flag <= 1'b0;
 		end
 		else begin
-			if(state_r == S_READ)  read_flag <= 1'b1;
+			if(state_r == S_READ)  read_flag <= 1'b1; //realization is similar to 2 cycle delay logic(data_valid is delayed signal of read_flag)
 			else if(state_r == S_IDLE && read_flag == 1'b1) begin
 				u_data_o_r <= dram_rd_data;
 				u_data_valid_r <= 1'b1;
