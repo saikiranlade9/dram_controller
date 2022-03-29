@@ -7,6 +7,7 @@ TODO:
 
 module dram_controller #
   (
+	
     parameter   integer NUMBER_OF_COLUMNS = 8,
     parameter   integer NUMBER_OF_ROWS = 128,
     parameter   integer NUMBER_OF_BANKS = 8,
@@ -27,6 +28,7 @@ module dram_controller #
     //user interface
     input                         u_rst_n, //reset, active low
     input                         u_clk, //input clock
+	input						  u_en,
     input   [U_ADDR_WIDTH-1:0]    u_addr, //address
     input   [U_DATA_WIDTH-1:0]    u_data_i, //write data
     input                         u_cmd, //command for controller

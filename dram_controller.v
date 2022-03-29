@@ -7,52 +7,54 @@ TODO:
 
 module dram_controller #
   (
+	//Given Specification
     parameter   integer NUMBER_OF_COLUMNS = 8,
     parameter   integer NUMBER_OF_ROWS = 128,
-    parameter   integer NUMBER_OF_BANKS = 8,
+    parameter   integer NUMBER_OF_BANKS = 8, // ############## Need to check with TAs ##############
     parameter   integer REFRESH_RATE = 125, // ms
-    parameter   integer CLK_FREQUENCY = 10, //MHz
+    parameter   integer CLK_FREQUENCY = 10, //MHz ######## Need to check with TAs ##############
     parameter   integer U_DATA_WIDTH = 8,
-    parameter   integer DRAM_DATA_WIDTH = 8,
-
-    parameter integer COLUMN_WIDTH = $clog2(NUMBER_OF_COLUMNS),
-    parameter integer ROW_WIDTH = $clog2(NUMBER_OF_ROWS),
-    parameter integer BANK_ID_WIDTH = $clog2(NUMBER_OF_BANKS),
-    parameter integer U_ADDR_WIDTH = BANK_ID_WIDTH + ROW_WIDTH + COLUMN_WIDTH,
-    parameter integer CYCLES_BETWEEN_REFRESH = $floor(CLK_FREQUENCY*REFRESH_RATE/1000),
-    parameter integer DRAM_ADDR_WIDTH = ROW_WIDTH > COLUMN_WIDTH ? ROW_WIDTH : COLUMN_WIDTH,
-    parameter integer REFRESH_COUNTER_WIDTH = $clog2(CYCLES_BETWEEN_REFRESH)
+    parameter   integer DRAM_DATA_WIDTH = 8, // ############## Need to check with TAs ##############
+	
+	//deduced from the given spec
+    parameter integer COLUMN_WIDTH = $clog2(NUMBER_OF_COLUMNS), //bits required to accommodate coulmn addresses
+    parameter integer ROW_WIDTH = $clog2(NUMBER_OF_ROWS), //bits required to accommodate rows addresses
+    parameter integer BANK_ID_WIDTH = $clog2(NUMBER_OF_BANKS), //bits required to accommodate bank id
+    parameter integer U_ADDR_WIDTH = BANK_ID_WIDTH + ROW_WIDTH + COLUMN_WIDTH, // address format : <bank_id, row_address, col_address>
+    parameter integer CYCLES_BETWEEN_REFRESH = $floor(CLK_FREQUENCY*REFRESH_RATE/1000), // number of clock cycles between consecutive refreshes
+    parameter integer DRAM_ADDR_WIDTH = ROW_WIDTH > COLUMN_WIDTH ? ROW_WIDTH : COLUMN_WIDTH, // since either column address or row address is sent at a time, dram address width = max(row_width, column_width)
+    parameter integer REFRESH_COUNTER_WIDTH = $clog2(CYCLES_BETWEEN_REFRESH) // bits required to accommodate cycles_between_refresh
   )
   (
     //user interface
     input                         u_rst_n, //reset, active low
     input                         u_clk, //input clock
-	input						  u_en,
-    input   [U_ADDR_WIDTH-1:0]    u_addr, //address
+	input						  u_en, //enables dram controller
+    input   [U_ADDR_WIDTH-1:0]    u_addr, //address : <bank_id, row_address, col_address>
     input   [U_DATA_WIDTH-1:0]    u_data_i, //write data
     input                         u_cmd, //command for controller
     output  [U_DATA_WIDTH-1:0]    u_data_o, //read data
     output                        u_data_valid, //valid flag for read data
-    output                        u_cmd_ack, //acknowledge signal for commands
-    output                        u_busy,
+    output                        u_cmd_ack, //signal to acknowlege the execution of the requested command
+    output                        u_busy, // busy signal
 
 
     //dram interface
-    input   [DRAM_DATA_WIDTH-1:0]   dram_rd_data, 
-    output  [DRAM_DATA_WIDTH-1:0]   dram_wr_data, //data
-    output  [DRAM_ADDR_WIDTH-1:0]   dram_addr,
+    input   [DRAM_DATA_WIDTH-1:0]   dram_rd_data, // data requested from dram
+	input							dram_refresh_done, //indicates completion of refresh(will remain asserted for one cycle only)
+    output  [DRAM_DATA_WIDTH-1:0]   dram_wr_data, //data to be written
+    output  [DRAM_ADDR_WIDTH-1:0]   dram_addr, // row or column address of the data
     output  [BANK_ID_WIDTH-1:0]     dram_bank_id, //bank address
     output                          dram_cs_n, //chip select
-    output                          dram_ras_n, //RAS command
-    output                          dram_cas_n, //CAS command
-    output                          dram_we_n, //WE command
-    output                          dram_clk_en
+    output                          dram_ras_n, //RAS(row address strobe) command
+    output                          dram_cas_n, //CAS(column address strobe) command
+    output                          dram_we_n, //WE(write enable) command
+    output                          dram_clk_en // clk enable
   );
 
     localparam
               STATE_WIDTH = 3,
-			  S_INIT	  = 3'h6,
-              S_IDLE      = 3'h0,
+              S_IDLE      = 3'h0, 
               S_PRECHARGE = 3'h1,
               S_ACTIVATE  = 3'h2,
               S_WRITE     = 3'h3,
@@ -60,14 +62,15 @@ module dram_controller #
               S_REFRESH   = 3'h5;
     //I/O registers
              
-    reg [REFRESH_COUNTER_WIDTH-1:0] refresh_count_r;
-    reg                             refresh_request_r;
+    reg [REFRESH_COUNTER_WIDTH-1:0] refresh_count_r; // register to store cycles count between refreshes
+    reg                             refresh_request_r; // status register to request refresh 
 
-    reg [DRAM_ADDR_WIDTH-1:0]       column_addr_r;
-    reg [DRAM_ADDR_WIDTH-1:0]       row_addr_r;
-    reg [BANK_ID_WIDTH-1:0]         bank_id_r;
+    reg [DRAM_ADDR_WIDTH-1:0]       column_addr_r; // coulmn address
+    reg [DRAM_ADDR_WIDTH-1:0]       row_addr_r; // row address
+    reg [BANK_ID_WIDTH-1:0]         bank_id_r; // bank id
 
-    reg [STATE_WIDTH-1:0]           state_r, next_state, target_state_r, next_target_state;
+    reg [STATE_WIDTH-1:0]           state_r, next_state, 
+									target_state_r, next_target_state; 
 
     reg                             u_cmd_ack_r;
     reg                             u_cmd_r; 
@@ -84,17 +87,36 @@ module dram_controller #
     reg                          we_n; //WE command
     reg                          clk_en;
     
+	reg							 read_flag, u_data_valid_r;
+	reg	[U_DATA_WIDTH-1:0]		 u_data_o_r;
+	
+	
     assign u_cmd_ack = u_cmd_ack_r;
 	
 	assign dram_wr_data = u_data_i_r;
-	assign dram_addr = (state_r == S_READ) or (state == S_WRITE) ? column_addr_r : row_addr_r;
 	assign dram_bank_id = bank_id_r;
-	assign dram_cs_n = cs_n; 
+	assign dram_cs_n = u_en ? cs_n : 1'b0; //chip select = 0 when dram controller is disabled 
 	assign dram_ras_n = ras_n;
 	assign dram_cas_n = cas_n;
 	assign dram_we_n = we_n;
-	assign dram_clk_en = clk_en; //########## INSPECTION REQUIRED ###############
-	assign u_busy = (state == IDLE) ? 1'b0 : 1'b1;
+	assign dram_clk_en = u_en ? clk_en : 1'b0; = 0 // clk enable = 0 when dram controller is disabled  ########## INSPECTION REQUIRED ###############
+	assign u_busy = (state == IDLE) ? 1'b0 : 1'b1; 
+
+	assign u_data_valid = u_data_valid_r;
+	assign u_data_o = u_data_o_r;
+	
+	always@ * begin
+		dram_addr = column_addr_r;
+		case(state_r)
+			S_PRECHARGE: dram_addr = active_row_r[bank_id_r];  //load the address of existing data in row buffer.
+			
+			S_ACTIVATE: dram_addr = row_addr_r;
+			
+			S_WRITE: dram_addr = column_addr_r;
+			
+			S_READ: dram_addr = column_addr_r;
+		endcase
+	end
 
     //sampling input data
     always@ (posedge u_clk) begin
@@ -106,13 +128,13 @@ module dram_controller #
         u_cmd_ack_r <= '0;
         u_data_i_r <= '0;
       end
-      else if(state_r == IDLE) begin
+      else if((state_r == IDLE) && (u_en == 1'b1)) begin
         column_addr_r <= {(ROW_WIDTH-COLUMN_WIDTH){1'b0}, u_addr[COLUMN_WIDTH-1:0]};
         row_addr_r <= u_addr[ROW_WIDTH+COLUMN_WIDTH-1:COLUMN_WIDTH];
         bank_id_r <= u_addr[U_ADDR_WIDTH-1:U_ADDR_WIDTH-BANK_ID_WIDTH];
-        u_cmd_r <= u_cmd;
-        u_cmd_ack_r <= '1;
-        if(u_cmd) u_data_i_r <= u_data_i;
+        u_cmd_r <= u_cmd; //1 implies WRITE operation 0 implies READ operation
+        u_cmd_ack_r <= '1; //command execution confirmation
+        if(u_cmd) u_data_i_r <= u_data_i; //sample input data incase of WRITE operation
       end
       else  u_cmd_ack_r <= '0;
     end
@@ -125,7 +147,8 @@ module dram_controller #
       end
       else  begin
         if(!refresh_count_r) begin
-          refresh_count_r <= REFRESH_COUNTER_WIDTH'(CYCLES_BETWEEN_REFRESH);
+			//execute the following line only when refresh operation is done. //###############################
+          if(dram_refresh_done) refresh_count_r <= REFRESH_COUNTER_WIDTH'(CYCLES_BETWEEN_REFRESH);
           refresh_request_r <= '1;
         end
         else  begin
@@ -153,22 +176,24 @@ module dram_controller #
 		next_target_state = target_state_r;
 		case(state_r)
 			S_IDLE: begin
-				if(refresh_request_r) begin
-					if(!open_row_r) next_state = S_REFRESH;
-					else next_state = S_PRECHARGE;
-					next_target_state = S_REFRESH;
+				if(refresh_request_r) begin 
+					if(!open_row_r) next_state = S_REFRESH; //when there is no open row, execute refresh
+					else begin
+						next_state = S_PRECHARGE; // when there are any open rows execute precharge and close all the rows
+						next_target_state = S_REFRESH;
+					end
 				end
-				else if(u_cmd_ack_r) begin
+				else if(u_cmd_ack_r) begin //confirms that inputs are sampled into respective registers
 					if(open_row_r[bank_id_r] && (row_addr_r == active_row_r[bank_id_r])) begin //ROW hit
 						if(u_cmd)	next_state = S_WRITE; //WRITE REQ
 						else	next_state = S_READ; //READ REQ
 					end
 					else if(open_row_r[bank_id_r] && (row_addr_r != active_row_r[bank_id_r])) begin //ROW miss
-						next_state = S_PRECHARGE;
+						next_state = S_PRECHARGE; //dram address should be active_row address
 						if(u_cmd)	next_target_state = S_WRITE;
 						else	next_target_state = S_READ;
 					end
-					else begin
+					else begin // when row buffers are empty
 						next_state = S_ACTIVATE;
 						if(u_cmd)	next_target_state = S_WRITE;
 						else	next_target_state = S_READ;
@@ -177,8 +202,8 @@ module dram_controller #
 			end
 			
 			S_PRECHARGE: begin
-				if(target_state_r == S_REFRESH) next_state = S_REFRESH; //closing a row to perform refresh
-				else next_state = S_ACTIVATE; //closing a row to open another
+				if(target_state_r == S_REFRESH) next_state = S_REFRESH; //closing all rows to perform refresh 
+				else next_state = S_ACTIVATE; //closing a row to open another //dram address should address of the active row buffer
 			end
 			
 			S_ACTIVATE: next_state = target_state_r; //activate rows for read or write operation
@@ -187,7 +212,7 @@ module dram_controller #
 			
 			S_READ: next_state = S_IDLE;
 			
-			S_REFRESH: next_state = IDLE; //########### INSPECTION REQUIRED #####################
+			S_REFRESH: if(dram_refresh_done) next_state = S_IDLE; //########### INSPECTION REQUIRED #####################
 		endcase
 	end
 	
@@ -248,6 +273,25 @@ module dram_controller #
 		endcase
 	  
     end
+	
+	//sampling read data and sending it user through u_data_o
+	always@ (posedge clk) begin
+		if(!rst_n) begin
+			u_data_o_r <= '0
+			u_data_valid_r <= 1'b0;
+			read_flag <= 1'b0;
+		end
+		else begin
+			if(state_r == S_READ)  read_flag <= 1'b1;
+			else if(state_r == S_IDLE && read_flag == 1'b1) begin
+				u_data_o_r <= dram_rd_data;
+				u_data_valid_r <= 1'b1;
+				read_flag <= 1'b0;
+			end
+			else u_data_valid_r <= 1'b0;
+		end
+	end
+	
 
 
 endmodule
