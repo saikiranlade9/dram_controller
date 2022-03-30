@@ -17,7 +17,7 @@ module dram #
 		parameter integer ROW_WIDTH = $clog2(NUMBER_OF_ROWS), //bits required to accommodate rows addresses
 		parameter integer BANK_ID_WIDTH = $clog2(NUMBER_OF_BANKS), //bits required to accommodate bank id
 		parameter integer U_ADDR_WIDTH = BANK_ID_WIDTH + ROW_WIDTH + COLUMN_WIDTH, // address format : <bank_id, row_address, col_address>
-		parameter integer CYCLES_BETWEEN_REFRESH = $floor(CLK_FREQUENCY*REFRESH_RATE/1000), // number of clock cycles between consecutive refreshes
+		parameter integer CYCLES_BETWEEN_REFRESH = CLK_FREQUENCY*REFRESH_RATE, // number of clock cycles between consecutive refreshes
 		parameter integer DRAM_ADDR_WIDTH = ROW_WIDTH > COLUMN_WIDTH ? ROW_WIDTH : COLUMN_WIDTH, // since either column address or row address is sent at a time, dram address width = max(row_width, column_width)
 		parameter integer REFRESH_COUNTER_WIDTH = $clog2(CYCLES_BETWEEN_REFRESH) // bits required to accommodate cycles_between_refresh
 	)
@@ -43,7 +43,7 @@ module dram #
 				C_ACTIVATE = 4'b0011, //activate
 				C_READ = 4'b0101, //read
 				C_WRITE = 4'b0100, //write
-				C_REFRESH = 4'b10001; //refresh
+				C_REFRESH = 4'b0001; //refresh
 	
 	//states to perform refresh
 	localparam	REF_S_WIDTH = 2,
@@ -66,7 +66,7 @@ module dram #
 	reg 						ref_act_flag, // asserted when precharge operation is done while refreshing
 								ref_pre_flag; // asserted when activate operation is done while refreshing
 	
-	wire	[C_WIDTH-1:0]	command; //<cs, ras, cas, we>
+	wire	[C_WIDTH-1:0]	command; //<cs_n, ras_n, cas_n, we_n>
 	
 	
 	assign	command = {dram_cs_n, dram_ras_n, dram_cas_n, dram_we_n}; 
@@ -90,9 +90,11 @@ module dram #
 		else if(!dram_cs_n) begin
 			if(refresh_time_out_r) begin
 				for(i=0; i<NUMBER_OF_BANKS; i=i+1) begin
-					row_buffers[i] <= $random; //destroy row buffer of bank(i)
-					for(j=0; j<NUMBER_OF_ROWS; j=j+1) begin
-						banks[j][i] <= $random; //destroy row(j) of bank(i)
+					if(dram_we_n) begin
+						row_buffers[i] <= $random; //destroy row buffer of bank(i)
+						for(j=0; j<NUMBER_OF_ROWS; j=j+1) begin
+							banks[j][i] <= $random; //destroy row(j) of bank(i)
+						end
 					end
 				end
 			end
@@ -100,7 +102,7 @@ module dram #
 			else if(refreshing) begin
 				if(ref_act_flag) begin
 					for(i=0; i<NUMBER_OF_BANKS; i=i+1) begin
-						row_buffers[i] <= banks[ref_addr_r][i]; //activate row(ref_ref_addr) of bank(i)
+						if(dram_we_n) row_buffers[i] <= banks[ref_addr_r][i]; //activate row(ref_ref_addr) of bank(i)
 					end
 				end
 				else if(ref_pre_flag) begin
@@ -115,11 +117,11 @@ module dram #
 					
 					C_PRECHARGE: banks[dram_addr][dram_bank_id] <=  row_buffers[dram_bank_id];
 					
-					C_ACTIVATE: row_buffers[dram_bank_id] <= banks[dram_addr][dram_bank_id];
+					C_ACTIVATE: if(dram_we_n) row_buffers[dram_bank_id] <= banks[dram_addr][dram_bank_id];
 					
 					C_READ:	dram_rd_data_r <=  row_buffers[dram_bank_id][dram_addr*DRAM_DATA_WIDTH +: DRAM_DATA_WIDTH];
 					
-					C_WRITE: row_buffers[dram_bank_id][dram_addr*DRAM_DATA_WIDTH +: DRAM_DATA_WIDTH] <=  dram_wr_data;
+					C_WRITE: if(dram_we_n) row_buffers[dram_bank_id][dram_addr*DRAM_DATA_WIDTH +: DRAM_DATA_WIDTH] <=  dram_wr_data;
 					
 					C_REFRESH: refresh_request_r <= 1'b1;
 					
