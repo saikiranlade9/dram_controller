@@ -13,7 +13,7 @@ module dram #
 		
 		//deduced from the given spec
 		//DONOT pass values to the following parameters while declaring the module.
-		parameter integer COLUMN_WIDTH = $clog2(NUMBER_OF_COLUMNS), //bits required to accommodate coulmn addresses
+		parameter integer COLUMN_WIDTH = $clog2(NUMBER_OF_COLUMNS/DRAM_DATA_WIDTH), //bits required to accommodate coulmn addresses
 		parameter integer ROW_WIDTH = $clog2(NUMBER_OF_ROWS), //bits required to accommodate rows addresses
 		parameter integer BANK_ID_WIDTH = $clog2(NUMBER_OF_BANKS), //bits required to accommodate bank id
 		parameter integer U_ADDR_WIDTH = BANK_ID_WIDTH + ROW_WIDTH + COLUMN_WIDTH, // address format : <bank_id, row_address, col_address>

@@ -57,7 +57,8 @@ module dram_controller #
               S_ACTIVATE  = 3'h2,
               S_WRITE     = 3'h3,
               S_READ      = 3'h4,
-              S_REFRESH   = 3'h5;
+              S_REFRESH   = 3'h5,
+			  S_INIT	  = 3'h6;
 			  
     //I/O registers
              
@@ -164,7 +165,7 @@ module dram_controller #
 	//Update state and target states
     always@ (posedge u_clk) begin
 	  if(!u_rst_n) begin
-		state_r <= S_IDLE;
+		state_r <= S_INIT;
 		target_state_r <= S_IDLE;
 	  end
 	  else if(u_en) begin
@@ -178,6 +179,8 @@ module dram_controller #
 		next_state = state_r;
 		next_target_state = target_state_r;
 		case(state_r)
+			S_INIT: next_state = S_REFRESH; //boot the memory
+			
 			S_IDLE: begin
 				if(refresh_request_r) begin 
 					if(!open_row_r) next_state = S_REFRESH; //when there is no open row, execute refresh

@@ -5,13 +5,13 @@
 module dram_controller #
   (
 	//Given Specification
-    parameter   integer NUMBER_OF_COLUMNS = 8, //############## Need to check with TAs ##############
+    parameter   integer NUMBER_OF_COLUMNS = 8,
     parameter   integer NUMBER_OF_ROWS = 128,
-    parameter   integer NUMBER_OF_BANKS = 8, // ############## Need to check with TAs ##############
+    parameter   integer NUMBER_OF_BANKS = 8, 
     parameter   integer REFRESH_RATE = 125, // ms
-    parameter   integer CLK_FREQUENCY = 100, //KHz ######## Need to check with TAs ##############
+    parameter   integer CLK_FREQUENCY = 100, //KHz 
     parameter   integer U_DATA_WIDTH = 8,
-    parameter   integer DRAM_DATA_WIDTH = 2, // ############## Need to check with TAs ##############
+    parameter   integer DRAM_DATA_WIDTH = 2, 
 	
 	//deduced from the given spec
 	//DONOT pass values to the following parameters while declaring the module.
