@@ -137,7 +137,7 @@ module dram_controller #
 		dram_addr_w = column_addr_r;
 		case(state_r)
 			S_PRECHARGE: begin
-				if((state_r == S_PRECHARGE) && (target_state_r == S_REF_SETUP || target_state_r == S_REF_SETUP) ) dram_addr_w = ref_set_addr;
+				if((state_r == S_PRECHARGE) && (target_state_r == S_REF_SETUP || target_state_r == S_REF_SETUP) ) dram_addr_w = active_row_r[ref_bank_id];
 				else dram_addr_w = active_row_r[bank_id_r];  //load the address of existing data in row buffer.
 			end
 			S_ACTIVATE: dram_addr_w = row_addr_r;

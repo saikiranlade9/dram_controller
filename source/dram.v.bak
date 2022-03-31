@@ -195,6 +195,7 @@ module dram #
 				if(refresh_request_r) begin
 					next_state = REF_S_ACT; 
 				end
+			end
 				
 			end
 			

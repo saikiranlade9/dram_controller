@@ -2,7 +2,7 @@
 
 module dram_controller_tb;
 
-	localparam	 integer NUMBER_OF_TESTS = 100;
+	localparam	 integer NUMBER_OF_TESTS = 10000;
 	//Given Specification
     localparam   integer NUMBER_OF_COLUMNS = 8;
     localparam   integer NUMBER_OF_ROWS = 128;
