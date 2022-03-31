@@ -1,0 +1,28 @@
+# This file sets up the simulation environment.
+
+
+create_project -part xc7a50t-ftg256-1 -force group5_dram_controller 
+set_property target_language Verilog [current_project]
+set_property "default_lib" "work" [current_project]
+tclapp::install ultrafast -quiet
+create_fileset -simset simset
+
+
+add_files -fileset simset [glob ../source/dram_controller.v]
+add_files -fileset simset [glob ../source/dram.v]
+add_files -fileset simset [glob ../source/timescale.vh]
+add_files -fileset simset [glob ../source/testbench/dram_controller_tb.v]
+
+current_fileset -simset [ get_filesets simset ]
+
+set_property top dram_controller_tb [get_filesets simset]
+# update_compile_order -fileset simset
+
+# set_property -name {xsim.elaborate.debug_level} -value {all} -objects [current_fileset -simset]
+# set_property target_simulator "XSim" [current_project]
+
+set_property -name {xsim.simulate.runtime} -value {15000us} -objects [get_filesets simset]
+
+launch_simulation -simset [get_filesets simset ]
+
+start_gui

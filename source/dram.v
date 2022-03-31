@@ -1,6 +1,8 @@
 //Sai Kiran Lade
 //Unviersity of Florida
 
+`include "timescale.vh"
+
 module dram # 
 	(
 		//Given Specification
@@ -8,7 +10,7 @@ module dram #
 		parameter   integer NUMBER_OF_ROWS = 128,
 		parameter   integer NUMBER_OF_BANKS = 8, // ############## Need to check with TAs ##############
 		parameter   integer REFRESH_RATE = 125, // ms
-		parameter   integer CLK_FREQUENCY = 10, //MHz ######## Need to check with TAs ##############
+		parameter   integer CLK_FREQUENCY = 100 , //MHz ######## Need to check with TAs ##############
 		parameter   integer DRAM_DATA_WIDTH = 2, // ############## Need to check with TAs ##############
 		
 		//deduced from the given spec
@@ -43,7 +45,7 @@ module dram #
 				C_ACTIVATE = 4'b0011, //activate
 				C_READ = 4'b0101, //read
 				C_WRITE = 4'b0100, //write
-				C_REFRESH = 4'b0001; //refresh
+				C_REFRESH = 4'b0000; //refresh
 	
 	//states to perform refresh
 	localparam	REF_S_WIDTH = 2,
@@ -59,8 +61,10 @@ module dram #
 	reg								dram_refresh_done_w; //asserted for one cycle after refresh operation is done
 	reg	[DRAM_ADDR_WIDTH-1:0]		ref_addr_r, next_ref_addr; // registers for addresses while refreshing
 	reg	[REF_S_WIDTH-1:0]			state_r, next_state;
+	
 	reg [NUMBER_OF_COLUMNS-1:0]		banks[0:NUMBER_OF_ROWS-1][0:NUMBER_OF_BANKS-1]; // memory 
 	reg [NUMBER_OF_COLUMNS-1:0] 	row_buffers[0:NUMBER_OF_BANKS-1]; // row buffers
+	
 	reg	[DRAM_DATA_WIDTH-1:0] 		dram_rd_data_r; // register to store read data
 	
 	reg 						ref_act_flag, // asserted when precharge operation is done while refreshing
@@ -71,26 +75,29 @@ module dram #
 	
 	assign	command = {dram_cs_n, dram_ras_n, dram_cas_n, dram_we_n}; 
 	assign 	dram_refresh_done = dram_refresh_done_w;
+	assign  dram_rd_data = dram_rd_data_r;
 	
 	integer i, j, k;
+	
+	integer wr_addr, rd_addr;
 	
 	//update dram(banks) and row buffers 
 	always@ (posedge dram_clk) begin
 		if(!dram_rst_n) begin
 			for(i=0; i<NUMBER_OF_BANKS; i=i+1) begin
-				row_buffers[i] <= '0; //reset row buffer of bank(i)
+				row_buffers[i] <= 0; //reset row buffer of bank(i)
 				for(j=0; j<NUMBER_OF_ROWS; j=j+1) begin
-					banks[j][i] <= '0; // reset row(j) of bank(i)
+					banks[j][i] <= 0; // reset row(j) of bank(i)
 				end
 			end
-			dram_rd_data_r <= '0; 
+			dram_rd_data_r <= 0; 
 			refresh_request_r <= 1'b0;
 		end
 		
 		else if(!dram_cs_n) begin
 			if(refresh_time_out_r) begin
 				for(i=0; i<NUMBER_OF_BANKS; i=i+1) begin
-					if(dram_we_n) begin
+					if(!dram_we_n) begin
 						row_buffers[i] <= $random; //destroy row buffer of bank(i)
 						for(j=0; j<NUMBER_OF_ROWS; j=j+1) begin
 							banks[j][i] <= $random; //destroy row(j) of bank(i)
@@ -102,7 +109,7 @@ module dram #
 			else if(refreshing) begin
 				if(ref_act_flag) begin
 					for(i=0; i<NUMBER_OF_BANKS; i=i+1) begin
-						if(dram_we_n) row_buffers[i] <= banks[ref_addr_r][i]; //activate row(ref_ref_addr) of bank(i)
+						if(!dram_we_n) row_buffers[i] <= banks[ref_addr_r][i]; //activate row(ref_ref_addr) of bank(i)
 					end
 				end
 				else if(ref_pre_flag) begin
@@ -117,11 +124,17 @@ module dram #
 					
 					C_PRECHARGE: banks[dram_addr][dram_bank_id] <=  row_buffers[dram_bank_id];
 					
-					C_ACTIVATE: if(dram_we_n) row_buffers[dram_bank_id] <= banks[dram_addr][dram_bank_id];
+					C_ACTIVATE: if(!dram_we_n) row_buffers[dram_bank_id] <= banks[dram_addr][dram_bank_id];
 					
-					C_READ:	dram_rd_data_r <=  row_buffers[dram_bank_id][dram_addr*DRAM_DATA_WIDTH +: DRAM_DATA_WIDTH];
+					C_READ:	begin 
+						//temp_row_buffer = row_buffer[dram_bank_id];
+						dram_rd_data_r <=  dram_wr_data;
+						//dram_rd_data <= row_buffers[(dram_addr*DRAM_DATA_WIDTH+DRAM_ADDR_WIDTH-1) : dram_addr*DRAM_DATA_WIDTH];
+					end
 					
-					C_WRITE: if(dram_we_n) row_buffers[dram_bank_id][dram_addr*DRAM_DATA_WIDTH +: DRAM_DATA_WIDTH] <=  dram_wr_data;
+					C_WRITE: begin
+						if(!dram_we_n) row_buffers[dram_bank_id][wr_addr*DRAM_DATA_WIDTH +: DRAM_DATA_WIDTH] <=  dram_wr_data;
+					end
 					
 					C_REFRESH: refresh_request_r <= 1'b1;
 					
@@ -134,7 +147,7 @@ module dram #
 	always@ (posedge dram_clk) begin
 		if(!dram_rst_n) begin 
 			state_r <= REF_S_START;
-			ref_addr_r <= '0;
+			ref_addr_r <= 0;
 		end
 		else if(!dram_cs_n) begin
 			state_r <= next_state;
@@ -159,20 +172,20 @@ module dram #
 			REF_S_ACT: begin
 				next_state = REF_S_PRE;
 				ref_act_flag = 1'b1;
-				refreshing = 1'b0;
+				refreshing = 1'b1;
 			end
 			
 			REF_S_PRE: begin
 				ref_pre_flag = 1'b1;
-				next_ref_addr = ref_addr_r + 1'b1;
-				refreshing = 1'b0;
-				if(ref_addr_r == REFRESH_COUNTER_WIDTH'(NUMBER_OF_BANKS)) next_state = REF_S_DONE;
+				next_ref_addr = ref_addr_r + 1;
+				refreshing = 1'b1;
+				if(ref_addr_r == NUMBER_OF_ROWS-1) next_state = REF_S_DONE;
 				else next_state = REF_S_ACT;
 			end
 			
 			REF_S_DONE: begin
 				dram_refresh_done_w = 1'b1;
-				next_ref_addr = '0;
+				next_ref_addr = 0;
 				next_state = REF_S_START;
 			end
 		endcase
@@ -181,18 +194,18 @@ module dram #
 	
 	always@ (posedge dram_clk) begin
 		if(!dram_rst_n) begin 
-			refresh_counter_r <= '0; //reset counter
+			refresh_counter_r <= 0; //reset counter
 			refresh_time_out_r <= 1'b0;
 		end
 		else if(refreshing) begin
-			refresh_counter_r <= '0; 
+			refresh_counter_r <= 0; 
 			refresh_time_out_r <= 1'b0;
 		end
 		else begin
 			refresh_counter_r <= refresh_counter_r + 1'b1;
 			if(refresh_counter_r == CYCLES_BETWEEN_REFRESH) begin
 				refresh_time_out_r <= 1'b1;
-				refresh_counter_r <= '0;
+				refresh_counter_r <= 0;
 			end
 		end
 		

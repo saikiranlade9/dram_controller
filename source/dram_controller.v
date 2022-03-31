@@ -1,6 +1,7 @@
 // Sai Kiran Lade
 // University of Florida
 
+`include "timescale.vh"
 
 module dram_controller #
   (
@@ -19,7 +20,7 @@ module dram_controller #
     parameter integer ROW_WIDTH = $clog2(NUMBER_OF_ROWS), //bits required to accommodate rows addresses
     parameter integer BANK_ID_WIDTH = $clog2(NUMBER_OF_BANKS), //bits required to accommodate bank id
     parameter integer U_ADDR_WIDTH = BANK_ID_WIDTH + ROW_WIDTH + COLUMN_WIDTH, // address format : <bank_id, row_address, col_address>
-    parameter integer CYCLES_BETWEEN_REFRESH = CLK_FREQUENCY*REFRESH_RATE, // number of clock cycles between consecutive refreshes //changes
+    parameter integer CYCLES_BETWEEN_REFRESH = (CLK_FREQUENCY * REFRESH_RATE)-10, // number of clock cycles between consecutive refreshes //changes
     parameter integer DRAM_ADDR_WIDTH = ROW_WIDTH > COLUMN_WIDTH ? ROW_WIDTH : COLUMN_WIDTH, // since either column address or row address is sent at a time, dram address width = max(row_width, column_width)
     parameter integer REFRESH_COUNTER_WIDTH = $clog2(CYCLES_BETWEEN_REFRESH) // bits required to accommodate cycles_between_refresh
   )
@@ -125,39 +126,42 @@ module dram_controller #
     //sampling input data
     always@ (posedge u_clk) begin
       if(!u_rst_n) begin
-        column_addr_r <= '0;
-        row_addr_r <= '0;
-        bank_id_r <= '0;
-        u_cmd_r <= '0;
-        u_cmd_ack_r <= '0;
-        u_data_i_r <= '0;
+        column_addr_r <= 0;
+        row_addr_r <= 0;
+        bank_id_r <= 0;
+        u_cmd_r <= 0;
+        u_cmd_ack_r <= 0;
+        u_data_i_r <= 0;
       end
-      else if((state_r == S_IDLE) && (u_en == 1'b1)) begin
+      else if((state_r == S_IDLE) && (u_en == 1'b1) && (!u_cmd_ack)) begin
         column_addr_r <= {{(ROW_WIDTH-COLUMN_WIDTH){1'b0}}, u_addr[COLUMN_WIDTH-1:0]};
         row_addr_r <= u_addr[COLUMN_WIDTH +: ROW_WIDTH];
         bank_id_r <= u_addr[ROW_WIDTH+COLUMN_WIDTH +: BANK_ID_WIDTH];
         u_cmd_r <= u_cmd; //1 implies WRITE operation 0 implies READ operation
-        u_cmd_ack_r <= '1; //command execution confirmation
+        u_cmd_ack_r <= 1'b1; //command execution confirmation
         if(u_cmd) u_data_i_r <= u_data_i; //sample input data incase of WRITE operation
       end
-      else  u_cmd_ack_r <= '0;
+      else  u_cmd_ack_r <= 0;
     end
 
     //refresh_logic
     always@ (posedge u_clk) begin
       if(!u_rst_n) begin
-        refresh_count_r <= REFRESH_COUNTER_WIDTH'(CYCLES_BETWEEN_REFRESH);
-        refresh_request_r <= '0;
+        refresh_count_r <= CYCLES_BETWEEN_REFRESH[REFRESH_COUNTER_WIDTH-1:0];
+        refresh_request_r <= 0;
       end
       else  begin
         if(!refresh_count_r) begin
 			//execute the following line only when refresh operation is done. //###############################
-          if(dram_refresh_done) refresh_count_r <= REFRESH_COUNTER_WIDTH'(CYCLES_BETWEEN_REFRESH);
-          refresh_request_r <= '1;
+          if(dram_refresh_done) begin
+            refresh_count_r <= CYCLES_BETWEEN_REFRESH[REFRESH_COUNTER_WIDTH-1:0];
+            refresh_request_r <= 0;
+          end
+          else refresh_request_r <= 1'b1;
         end
         else  begin
           refresh_count_r <= refresh_count_r - 1'b1;
-          refresh_request_r <= '0;
+          refresh_request_r <= 0;
         end
       end
     end
@@ -165,7 +169,7 @@ module dram_controller #
 	//Update state and target states
     always@ (posedge u_clk) begin
 	  if(!u_rst_n) begin
-		state_r <= S_INIT;
+		state_r <= S_IDLE;
 		target_state_r <= S_IDLE;
 	  end
 	  else if(u_en) begin
@@ -218,7 +222,11 @@ module dram_controller #
 			
 			S_READ: next_state = S_IDLE;
 			
-			S_REFRESH: if(dram_refresh_done) next_state = S_IDLE; //########### INSPECTION REQUIRED #####################
+			S_REFRESH: 
+			     if(dram_refresh_done) begin 
+			         next_state = S_IDLE;
+			         next_target_state = S_IDLE;
+			     end //########### INSPECTION REQUIRED #####################
 		endcase
 	end
 	
@@ -226,9 +234,9 @@ module dram_controller #
 	//Track active rows
 	always@ (posedge u_clk) begin
 		if(!u_rst_n) begin
-			open_row_r <= '0;
+			open_row_r <= 0;
 			for (i=0; i<NUMBER_OF_BANKS; i = i+1) begin
-				active_row_r[i] <= '0;
+				active_row_r[i] <= 0;
 			end
 		end
 		else begin
@@ -238,7 +246,7 @@ module dram_controller #
 					open_row_r[bank_id_r] <= 1'b1;
 				end
 				S_PRECHARGE: begin
-					if(target_state_r == S_REFRESH)	open_row_r <= '0; //close all banks
+					if(target_state_r == S_REFRESH)	open_row_r <= 0; //close all banks
 					else open_row_r[bank_id_r] <= 1'b0; // close that particular bank					
 				end
 			endcase
@@ -277,6 +285,7 @@ module dram_controller #
 			S_REFRESH: begin
 				ras_n = 1'b0;
 				cas_n = 1'b0;
+				we_n = 2'b0;
 			end
 		endcase
 	  
@@ -285,7 +294,7 @@ module dram_controller #
 	//sampling read data and sending it user through u_data_o
 	always@ (posedge u_clk) begin
 		if(!u_rst_n) begin
-			u_data_o_r <= '0;
+			u_data_o_r <= 0;
 			u_data_valid_r <= 1'b0;
 			read_flag <= 1'b0;
 		end

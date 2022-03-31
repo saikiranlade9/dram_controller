@@ -1,16 +1,13 @@
-// Sai Kiran Lade
-// University of Florida
-
-`timescale 1 us / 100 ns
+`include "timescale.vh"
 
 module dram_controller_tb;
 
-	localparam	 integer NUMBER_OF_TESTS = 10000;
+	localparam	 integer NUMBER_OF_TESTS = 100;
 	//Given Specification
     localparam   integer NUMBER_OF_COLUMNS = 8;
     localparam   integer NUMBER_OF_ROWS = 128;
     localparam   integer NUMBER_OF_BANKS = 8; 
-    localparam   integer REFRESH_RATE = 125; // ms
+    localparam   integer REFRESH_RATE = 1; // ms
     localparam   integer CLK_FREQUENCY = 100; //KHz 
     localparam   integer U_DATA_WIDTH = 2;
     localparam   integer DRAM_DATA_WIDTH = 2; 
@@ -21,7 +18,7 @@ module dram_controller_tb;
     localparam integer ROW_WIDTH = $clog2(NUMBER_OF_ROWS); //bits required to accommodate rows addresses
     localparam integer BANK_ID_WIDTH = $clog2(NUMBER_OF_BANKS); //bits required to accommodate bank id
     localparam integer U_ADDR_WIDTH = BANK_ID_WIDTH + ROW_WIDTH + COLUMN_WIDTH; // address format : <bank_id; row_address; col_address>
-    localparam integer CYCLES_BETWEEN_REFRESH = CLK_FREQUENCY*REFRESH_RATE; // number of clock cycles between consecutive refreshes //changes
+    localparam integer CYCLES_BETWEEN_REFRESH = CLK_FREQUENCY * REFRESH_RATE; // number of clock cycles between consecutive refreshes //changes
     localparam integer DRAM_ADDR_WIDTH = ROW_WIDTH > COLUMN_WIDTH ? ROW_WIDTH : COLUMN_WIDTH; // since either column address or row address is sent at a time; dram address width = max(row_width; column_width)
     localparam integer REFRESH_COUNTER_WIDTH = $clog2(CYCLES_BETWEEN_REFRESH); // bits required to accommodate cycles_between_refresh
 	
@@ -58,12 +55,12 @@ module dram_controller_tb;
 	reg [NUMBER_OF_COLUMNS-1:0]		dummy[0:NUMBER_OF_ROWS-1][0:NUMBER_OF_BANKS-1]; // dummy memory 
 	
 	
-	reg [$clog2(NUMBER_OF_TESTS)-1: 0] tests_failed = '0;
+	reg [$clog2(NUMBER_OF_TESTS)-1: 0] tests_failed = 0;
 	
 
 	
 	
-	integer i;
+	integer i, j;
 	
 	dram_controller #
 		(
@@ -127,6 +124,7 @@ module dram_controller_tb;
 	
 	//clock generator
 	initial begin : generate_clock
+	   $timeformat(-6, 0, "us");
 		while(1)
 	#5	u_clk = ~u_clk; //wait for 5us
 	end
@@ -136,9 +134,9 @@ module dram_controller_tb;
 		
 		u_rst_n <= 1'b1;
 		u_en <= 1'b0;
-		u_addr <= '0;
-		u_data_i <= '0;
-		u_cmd <= '0;
+		u_addr <= 0;
+		u_data_i <= 0;
+		u_cmd <= 0;
 		
 		for(i=0; i<10; i=i+1) @(posedge u_clk); //wait for 10 cycles
 	
@@ -151,53 +149,56 @@ module dram_controller_tb;
 		u_en <= 1'b1;
 		
 		for(i=0; i<NUMBER_OF_TESTS; i=i+1) begin
-			wait(u_busy != 1'b1);
+			wait(u_busy == 1'b0);
 			@(negedge u_clk);
 			u_addr <= $random;
 			u_data_i <= $random;
 			u_cmd <= $random;
 			wait(u_cmd_ack == 1'b1);
 			@(posedge u_clk);
+			@(posedge u_clk);
 		end
 		
-		$display("Tests failed: %d", tests_failed);
+		wait(u_busy == 1'b1);
+		
+		for(i=0; i<10; i=i+1) @(posedge u_clk); //wait for 10 cycles
+		
+		$display("%0d tests passed out of %0d", NUMBER_OF_TESTS-tests_failed, NUMBER_OF_TESTS);
+		$display("time: %0t: Simulation Closed!", $time);
 		
 		disable generate_clock;
-		disable scoreboard ;
-		
-		$display("Simulation Closed!");
+		disable scoreboard ;	
 	end
 	
-	initial begin : scoreboard
-		while(1) begin
-			
-			wait(u_cmd_ack == 1'b1);
-			prev_addr = u_addr;
-			prev_data_i = u_data_i;
-			prev_cmd = u_cmd;
-			
-			prev_col_addr = prev_addr[COLUMN_WIDTH-1:0];
-			prev_row_addr = prev_addr[COLUMN_WIDTH +: ROW_WIDTH];
-			prev_bank_id = prev_addr[ROW_WIDTH+COLUMN_WIDTH +: BANK_ID_WIDTH];
-			
-			if(prev_cmd) dummy[prev_row_addr][prev_bank_id][prev_col_addr +: COLUMN_WIDTH] = prev_data_i; //write the data to dummy memory if it's a write transaction
-			
-			wait(u_busy == 1'b0); 
-			if(prev_cmd == 1'b0) begin //READ
-				wait(u_data_valid);
-				prev_data_o = u_data_o;
-				if(prev_data_o != dummy[prev_row_addr][prev_bank_id][prev_col_addr +: COLUMN_WIDTH]) begin
-					$display("ERROR: (time %0t): READ_OP: %d read instead of %d", $time, prev_data_o, dummy[prev_row_addr][prev_bank_id][prev_col_addr +: COLUMN_WIDTH]);
-					tests_failed = tests_failed + 1;
+	always begin : scoreboard
+	   $timeformat(-6, 0, "us");
+        @(posedge u_clk);
+        if(!u_rst_n) begin
+            for(i=0; i<NUMBER_OF_BANKS; i=i+1) begin
+				for(j=0; j<NUMBER_OF_ROWS; j=j+1) begin
+					dummy[j][i] <= 0; // reset row(j) of bank(i)
 				end
 			end
-			else if(prev_cmd == 1'b1) begin //WRITE
-				if(dummy[prev_row_addr][prev_bank_id][prev_col_addr +: COLUMN_WIDTH] == memory.banks[prev_row_addr][prev_bank_id][prev_col_addr +: COLUMN_WIDTH]) begin
-					$display("ERROR: (time %0t): WRITE_OP: %d written instead of %d", $time, memory.banks[prev_row_addr][prev_bank_id][prev_col_addr +: COLUMN_WIDTH], dummy[prev_row_addr][prev_bank_id][prev_col_addr +: COLUMN_WIDTH]);
-					tests_failed = tests_failed + 1;
-				end
-			end
-		end	
-	end
-
+        end
+        wait(u_cmd_ack == 1'b1);
+        prev_addr = u_addr;
+        prev_data_i = u_data_i;
+        prev_cmd = u_cmd;
+        
+        prev_col_addr = prev_addr[COLUMN_WIDTH-1:0];
+        prev_row_addr = prev_addr[COLUMN_WIDTH +: ROW_WIDTH];
+        prev_bank_id = prev_addr[ROW_WIDTH+COLUMN_WIDTH +: BANK_ID_WIDTH];
+        
+        if(prev_cmd) dummy[prev_row_addr][prev_bank_id][prev_col_addr +: COLUMN_WIDTH] = prev_data_i; //write the data to dummy memory if it's a write transaction
+        
+        wait(u_busy == 1'b0); 
+        if(prev_cmd == 1'b0) begin //READ
+            wait(u_data_valid);
+            prev_data_o = u_data_o;
+            if(prev_data_o != dummy[prev_row_addr][prev_bank_id][prev_col_addr +: COLUMN_WIDTH]) begin
+                $display("ERROR: (time %0t): READ_OP: %d read instead of %d", $time, prev_data_o, dummy[prev_row_addr][prev_bank_id][prev_col_addr +: COLUMN_WIDTH]);
+                tests_failed = tests_failed + 1;
+            end
+        end
+    end
 endmodule
