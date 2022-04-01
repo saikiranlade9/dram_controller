@@ -1,1 +1,0 @@
-`timescale 1 us / 100 ns

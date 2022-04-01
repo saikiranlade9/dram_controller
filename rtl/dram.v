@@ -171,12 +171,13 @@ module dram #
 	
 	end
 	
+	// refreshing fsm
 	always@ (posedge dram_clk) begin
 		if(!dram_rst_n) begin 
 			state_r <= REF_S_START;
 			ref_addr_r <= 0;
 		end
-		else if(!dram_cs_n && refresh_request_r) begin // ######### changes made #######################
+		else if(!dram_cs_n && refresh_request_r) begin 
 			state_r <= next_state;
 			ref_addr_r <= next_ref_addr;
 		end
@@ -222,6 +223,7 @@ module dram #
 		
 	end
 	
+	//refresh time out tracker
 	always@ (posedge dram_clk) begin
 		if(!dram_rst_n) begin 
 			refresh_counter_r <= 0; //reset counter

@@ -2,7 +2,7 @@
 
 module dram_controller_tb;
 
-	localparam	 integer NUMBER_OF_TESTS = 10000;
+	localparam	 integer NUMBER_OF_TESTS = 100;
 	//Given Specification
     localparam   integer NUMBER_OF_COLUMNS = 8;
     localparam   integer NUMBER_OF_ROWS = 128;
@@ -165,8 +165,12 @@ module dram_controller_tb;
 		
 		for(i=0; i<10; i=i+1) @(posedge u_clk); //wait for 10 cycles
 		
+		$display("*******************************************************************************");
+		$display("*******************************************************************************");
 		$display("%0d tests passed out of %0d", NUMBER_OF_TESTS-tests_failed, NUMBER_OF_TESTS);
 		$display("time: %0t: Simulation Closed!", $time);
+		$display("*******************************************************************************");
+		$display("*******************************************************************************");
 		
 		disable generate_clock;
 		disable scoreboard ;	
@@ -197,7 +201,7 @@ module dram_controller_tb;
         if(prev_cmd == 1'b0) begin //READ
             wait(u_data_valid);
             prev_data_o = u_data_o;
-            if(prev_data_o != dummy[prev_row_addr][prev_bank_id][prev_col_addr +: COLUMN_WIDTH]) begin
+            if(prev_data_o !== dummy[prev_row_addr][prev_bank_id][prev_col_addr +: COLUMN_WIDTH] && (!dram.dram_cs_n) && (!dram.dram_clk_en)) begin
                 $display("ERROR: (time %0t): READ_OP: %d read instead of %d", $time, prev_data_o, dummy[prev_row_addr][prev_bank_id][prev_col_addr +: COLUMN_WIDTH]);
                 tests_failed = tests_failed + 1;
             end

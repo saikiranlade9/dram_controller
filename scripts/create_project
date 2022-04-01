@@ -8,10 +8,10 @@ tclapp::install ultrafast -quiet
 create_fileset -simset simset
 
 
-add_files -fileset simset [glob ../source/dram_controller.v]
-add_files -fileset simset [glob ../source/dram.v]
-add_files -fileset simset [glob ../source/timescale.vh]
-add_files -fileset simset [glob ../source/testbench/dram_controller_tb.v]
+add_files -fileset simset [glob ../rtl/dram_controller.v]
+add_files -fileset simset [glob ../rtl/dram.v]
+add_files -fileset simset [glob ../rtl/timescale.vh]
+add_files -fileset simset [glob ../tb/dram_controller_tb.v]
 
 current_fileset -simset [ get_filesets simset ]
 
@@ -21,7 +21,7 @@ set_property top dram_controller_tb [get_filesets simset]
 # set_property -name {xsim.elaborate.debug_level} -value {all} -objects [current_fileset -simset]
 # set_property target_simulator "XSim" [current_project]
 
-set_property -name {xsim.simulate.runtime} -value {15000us} -objects [get_filesets simset]
+set_property -name {xsim.simulate.runtime} -value {25000us} -objects [get_filesets simset]
 
 launch_simulation -simset [get_filesets simset ]
 

@@ -96,12 +96,10 @@ module dram_controller #
 	
 	reg	[DRAM_ADDR_WIDTH-1:0]	dram_addr_w;
 	
-	// ################################################
 	reg [47:0]	dram_state; 
 	integer i;
 	reg [BANK_ID_WIDTH-1:0] ref_bank_id;
 	reg [DRAM_ADDR_WIDTH-1:0] ref_set_addr;
-	// ################################################
 	
 	
     assign u_cmd_ack = u_cmd_ack_r;
@@ -119,7 +117,7 @@ module dram_controller #
 	assign u_data_valid = u_data_valid_r;
 	assign u_data_o = u_data_o_r;
 	
-	// ################################################
+	// convert state variable to string type for seeing state names in simulation
 	always @ * begin
 		case(state_r)
 			S_IDLE: dram_state = "S_IDLE";
@@ -131,24 +129,8 @@ module dram_controller #
 			S_REF_SETUP: dram_state = "S_RSET";
 		endcase
 	end
-	// ################################################
 	
-	always@ * begin
-		dram_addr_w = column_addr_r;
-		case(state_r)
-			S_PRECHARGE: begin
-				if((state_r == S_PRECHARGE) && (target_state_r == S_REF_SETUP || target_state_r == S_REF_SETUP) ) dram_addr_w = ref_set_addr;
-				else dram_addr_w = active_row_r[bank_id_r];  //load the address of existing data in row buffer.
-			end
-			S_ACTIVATE: dram_addr_w = row_addr_r;
-			
-			S_WRITE: dram_addr_w = column_addr_r;
-			
-			S_READ: dram_addr_w = column_addr_r;
-		endcase
-	end
-
-    //sampling input data
+	//sampling input data
     always@ (posedge u_clk) begin
       if(!u_rst_n) begin
         column_addr_r <= 0;
@@ -168,52 +150,8 @@ module dram_controller #
       end
       else  u_cmd_ack_r <= 0;
     end
-
-    //refresh_logic
-    always@ (posedge u_clk) begin
-      if(!u_rst_n) begin
-        refresh_count_r <= CYCLES_BETWEEN_REFRESH[REFRESH_COUNTER_WIDTH-1:0];
-        refresh_request_r <= 0;
-      end
-      else  begin
-        if(!refresh_count_r) begin
-			//execute the following line only when refresh operation is done. //###############################
-          if(dram_refresh_done) begin
-            refresh_count_r <= CYCLES_BETWEEN_REFRESH[REFRESH_COUNTER_WIDTH-1:0];
-            refresh_request_r <= 0;
-          end
-          else refresh_request_r <= 1'b1;
-        end
-        else  begin
-          refresh_count_r <= refresh_count_r - 1'b1;
-          refresh_request_r <= 0;
-        end
-      end
-    end
-
-	always @* begin
-		for(i=0; i<NUMBER_OF_BANKS; i=i+1) begin
-			if(open_row_r[i]) begin
-				ref_bank_id = i;
-				i = NUMBER_OF_BANKS;
-			end
-		end
-	end
-	
-
-	always@ (posedge u_clk) begin
-		if(!u_rst_n) begin
-			ref_set_addr <= 0;
-		end
-		else if(u_en && (state_r == S_REF_SETUP)) begin
-			if(open_row_r[ref_bank_id])
-				ref_set_addr <= active_row_r[ref_bank_id];
-		end
-	
-	end
-
-
-	//Update state and target states
+    
+    //Update state and target states
     always@ (posedge u_clk) begin
 	  if(!u_rst_n) begin
 		state_r <= S_IDLE;
@@ -285,37 +223,11 @@ module dram_controller #
 			     if(dram_refresh_done) begin 
 			         next_state = S_IDLE;
 			         next_target_state = S_IDLE;
-			     end //########### INSPECTION REQUIRED #####################
+			     end 
 		endcase
 	end
-	
-	//Track active rows
-	always@ (posedge u_clk) begin
-		if(!u_rst_n) begin
-			open_row_r <= 0;
-			for (i=0; i<NUMBER_OF_BANKS; i = i+1) begin
-				active_row_r[i] <= 0;
-			end
-		end
-		else begin
-			case(state_r) 
-				S_ACTIVATE: begin
-					active_row_r[bank_id_r] <= row_addr_r;
-					open_row_r[bank_id_r] <= 1'b1;
-				end
-				S_PRECHARGE: begin
-					if(target_state_r == S_REFRESH)	open_row_r <= 0; //close all banks
-					if(target_state_r == S_REF_SETUP) open_row_r[ref_bank_id] <= 1'b0;
-					else open_row_r[bank_id_r] <= 1'b0; // close that particular bank					
-				end
-			endcase
-		end
-	end
-	
-	
-	
     
-    //send appropriate commands
+      //send appropriate commands
     always@ * begin
 		clk_en	= 1'b1;
 		cs_n	= 1'b0;
@@ -349,7 +261,90 @@ module dram_controller #
 		endcase
 	  
     end
+    
+    // address mapping
+	always@ * begin
+		dram_addr_w = column_addr_r;
+		case(state_r)
+			S_PRECHARGE: begin
+				if((state_r == S_PRECHARGE) && (target_state_r == S_REF_SETUP || target_state_r == S_REF_SETUP) ) dram_addr_w = ref_set_addr;
+				else dram_addr_w = active_row_r[bank_id_r];  //load the address of existing data in row buffer.
+			end
+			S_ACTIVATE: dram_addr_w = row_addr_r;
+			
+			S_WRITE: dram_addr_w = column_addr_r;
+			
+			S_READ: dram_addr_w = column_addr_r;
+		endcase
+	end
+
+    //Track active rows
+	always@ (posedge u_clk) begin
+		if(!u_rst_n) begin
+			open_row_r <= 0;
+			for (i=0; i<NUMBER_OF_BANKS; i = i+1) begin
+				active_row_r[i] <= 0;
+			end
+		end
+		else begin
+			case(state_r) 
+				S_ACTIVATE: begin
+					active_row_r[bank_id_r] <= row_addr_r;
+					open_row_r[bank_id_r] <= 1'b1;
+				end
+				S_PRECHARGE: begin
+					if(target_state_r == S_REFRESH)	open_row_r <= 0; //close all banks
+					if(target_state_r == S_REF_SETUP) open_row_r[ref_bank_id] <= 1'b0;
+					else open_row_r[bank_id_r] <= 1'b0; // close that particular bank					
+				end
+			endcase
+		end
+	end
+    
+
+    //refresh_logic
+    always@ (posedge u_clk) begin
+      if(!u_rst_n) begin
+        refresh_count_r <= CYCLES_BETWEEN_REFRESH[REFRESH_COUNTER_WIDTH-1:0];
+        refresh_request_r <= 0;
+      end
+      else  begin
+        if(!refresh_count_r) begin
+			//execute the following line only when refresh operation is done. //###############################
+          if(dram_refresh_done) begin
+            refresh_count_r <= CYCLES_BETWEEN_REFRESH[REFRESH_COUNTER_WIDTH-1:0];
+            refresh_request_r <= 0;
+          end
+          else refresh_request_r <= 1'b1;
+        end
+        else  begin
+          refresh_count_r <= refresh_count_r - 1'b1;
+          refresh_request_r <= 0;
+        end
+      end
+    end
+
+	always @* begin
+		for(i=0; i<NUMBER_OF_BANKS; i=i+1) begin
+			if(open_row_r[i]) begin
+				ref_bank_id = i;
+				i = NUMBER_OF_BANKS;
+			end
+		end
+	end
 	
+
+	always@ (posedge u_clk) begin
+		if(!u_rst_n) begin
+			ref_set_addr <= 0;
+		end
+		else if(u_en && (state_r == S_REF_SETUP)) begin
+			if(open_row_r[ref_bank_id])
+				ref_set_addr <= active_row_r[ref_bank_id];
+		end
+	
+	end
+
 	//sampling read data and sending it user through u_data_o
 	always@ (posedge u_clk) begin
 		if(!u_rst_n) begin
