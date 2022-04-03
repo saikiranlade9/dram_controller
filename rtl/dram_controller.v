@@ -3,6 +3,7 @@
 
 `include "timescale.vh"
 
+
 module dram_controller #
   (
 	//Given Specification
@@ -20,7 +21,7 @@ module dram_controller #
     parameter integer ROW_WIDTH = $clog2(NUMBER_OF_ROWS), //bits required to accommodate rows addresses
     parameter integer BANK_ID_WIDTH = $clog2(NUMBER_OF_BANKS), //bits required to accommodate bank id
     parameter integer U_ADDR_WIDTH = BANK_ID_WIDTH + ROW_WIDTH + COLUMN_WIDTH, // address format : <bank_id, row_address, col_address>
-    parameter integer CYCLES_BETWEEN_REFRESH = (CLK_FREQUENCY * REFRESH_RATE)-50, // number of clock cycles between consecutive refreshes //changes
+    parameter integer CYCLES_BETWEEN_REFRESH = CLK_FREQUENCY*REFRESH_RATE - 100, // number of clock cycles between consecutive refreshes //changes
     parameter integer DRAM_ADDR_WIDTH = ROW_WIDTH > COLUMN_WIDTH ? ROW_WIDTH : COLUMN_WIDTH, // since either column address or row address is sent at a time, dram address width = max(row_width, column_width)
     parameter integer REFRESH_COUNTER_WIDTH = $clog2(CYCLES_BETWEEN_REFRESH) // bits required to accommodate cycles_between_refresh
   )

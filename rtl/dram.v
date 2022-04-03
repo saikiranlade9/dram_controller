@@ -3,6 +3,7 @@
 
 `include "timescale.vh"
 
+
 module dram # 
 	(
 		//Given Specification
@@ -19,7 +20,7 @@ module dram #
 		parameter integer ROW_WIDTH = $clog2(NUMBER_OF_ROWS), //bits required to accommodate rows addresses
 		parameter integer BANK_ID_WIDTH = $clog2(NUMBER_OF_BANKS), //bits required to accommodate bank id
 		parameter integer U_ADDR_WIDTH = BANK_ID_WIDTH + ROW_WIDTH + COLUMN_WIDTH, // address format : <bank_id, row_address, col_address>
-		parameter integer CYCLES_BETWEEN_REFRESH = CLK_FREQUENCY*REFRESH_RATE, // number of clock cycles between consecutive refreshes
+		parameter integer CYCLES_BETWEEN_REFRESH = CLK_FREQUENCY * 	REFRESH_RATE, // number of clock cycles between consecutive refreshes
 		parameter integer DRAM_ADDR_WIDTH = ROW_WIDTH > COLUMN_WIDTH ? ROW_WIDTH : COLUMN_WIDTH, // since either column address or row address is sent at a time, dram address width = max(row_width, column_width)
 		parameter integer REFRESH_COUNTER_WIDTH = $clog2(CYCLES_BETWEEN_REFRESH) // bits required to accommodate cycles_between_refresh
 	)
@@ -101,8 +102,8 @@ module dram #
 		
 		else if(!dram_cs_n) begin
 			// #######################
-			wr_flag <= 1'b0;
-			rd_flag <= 1'b0;
+			wr_flag = 1'b0;
+			rd_flag = 1'b0;
 			// #######################
 			if(refresh_time_out_r) begin
 				for(i=0; i<NUMBER_OF_BANKS; i=i+1) begin
@@ -128,6 +129,8 @@ module dram #
 				end
 			end
 			
+			else if(dram_refresh_done) refresh_request_r <= 0;
+			
 			else begin
 				case(command)
 					
@@ -136,36 +139,20 @@ module dram #
 					C_ACTIVATE: if(!dram_we_n) row_buffers[dram_bank_id] <= banks[dram_addr][dram_bank_id];
 					
 					C_READ:	begin 
-						 // ######### changes made #######################
-						// #########################################################
-						//temp_row_buffer = row_buffers[dram_bank_id];
-						// dram_rd_data_r <=  dram_wr_data;
-						rd_flag <= 1'b1;
-						// case (dram_addr[1:0])
-							// 2'b00: dram_rd_data_r <= row_buffers[dram_bank_id][1:0];
-							
-							// 2'b01: dram_rd_data_r <= row_buffers[dram_bank_id][3:2];
-							
-							// 2'b10: dram_rd_data_r <= row_buffers[dram_bank_id][5:4];
-							
-							// 2'b11: dram_rd_data_r <= row_buffers[dram_bank_id][7:6];
-						// endcase
+						rd_flag <= 1'b1; //############# for testing #############
 						dram_rd_data_r <= row_buffers[dram_bank_id][dram_addr*DRAM_DATA_WIDTH +: DRAM_DATA_WIDTH];
-						//#############################################################
 					end
 					
 					C_WRITE: begin
 						if(!dram_we_n) begin
 							row_buffers[dram_bank_id][dram_addr*DRAM_DATA_WIDTH +: DRAM_DATA_WIDTH] <=  dram_wr_data;
-							wr_flag <= 1'b1;  // ######### changes made #######################
+							wr_flag <= 1'b1;  //############# for testing #############
 						end
 					end
 					
 					C_REFRESH: refresh_request_r <= 1'b1;
 					
 				endcase
-				
-			if(dram_refresh_done) refresh_request_r <= 1'b0;
 			end
 		end
 	
@@ -177,7 +164,7 @@ module dram #
 			state_r <= REF_S_START;
 			ref_addr_r <= 0;
 		end
-		else if(!dram_cs_n && refresh_request_r) begin 
+		else if(!dram_cs_n) begin 
 			state_r <= next_state;
 			ref_addr_r <= next_ref_addr;
 		end
@@ -209,7 +196,11 @@ module dram #
 				ref_pre_flag = 1'b1;
 				next_ref_addr = ref_addr_r + 1;
 				refreshing = 1'b1;
-				if(ref_addr_r == NUMBER_OF_ROWS-1) next_state = REF_S_DONE;
+				if(ref_addr_r == NUMBER_OF_ROWS-1) begin 
+					next_state = REF_S_DONE;
+					refreshing = 0;
+					dram_refresh_done_w = 1'b1;
+				end
 				else next_state = REF_S_ACT;
 			end
 			
@@ -234,11 +225,17 @@ module dram #
 			refresh_time_out_r <= 1'b0;
 		end
 		else begin
-			refresh_counter_r <= refresh_counter_r + 1'b1;
-			if(refresh_counter_r == CYCLES_BETWEEN_REFRESH) begin
+			
+			if(refresh_counter_r == CYCLES_BETWEEN_REFRESH-1 && refresh_time_out_r == 1'b0) begin
 				refresh_time_out_r <= 1'b1;
 				refresh_counter_r <= 0;
 			end
+			else if(refresh_time_out_r == 1'b1) begin
+				refresh_time_out_r <= 1'b0;
+				refresh_counter_r <= refresh_counter_r + 1'b1;
+			end
+			
+			else refresh_counter_r <= refresh_counter_r + 1'b1;
 		end
 		
 			
