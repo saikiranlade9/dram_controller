@@ -53,6 +53,7 @@ Though each bank can be accessed simultaneously but at a time only one bank can 
 **Inputs and Outputs:**   
 
 **User Interface:** 
+
 u_rst_n	      : reset, active low 
 
 u_clk	        : clock 
@@ -74,23 +75,24 @@ u_busy		    : busy signal, asserted while the dram is executing operations.
 u_data_o		  : output read data 
 
 **DRAM Interface:** 
-dram_addr		: address, column address for READ and WRITE commands; row address for ACTIVATE and PRECHARGE commands. 
 
-dram_bank_id		: bank ID  
+dram_addr		      : address, column address for READ and WRITE commands; row address for ACTIVATE and PRECHARGE commands. 
 
-dram_cs_n		: chip select, active low 
+dram_bank_id		  : bank ID  
 
-dram_ras_n		: row address strobe, active low 
+dram_cs_n		      : chip select, active low 
 
-dram_cas_n		: column address strobe, active low 
+dram_ras_n		    : row address strobe, active low 
 
-dram_we_n		: write enable, active low 
+dram_cas_n	 	    : column address strobe, active low 
 
-dram_clk_en		: clock enable, active low 
+dram_we_n		      : write enable, active low 
 
-dram_refresh_done	: asserted when dram is done refreshing 
+dram_clk_en		    : clock enable, active low 
 
-dram_rd_data		: read data 
+dram_refresh_done : asserted when dram is done refreshing 
+
+dram_rd_data		  : read data 
 
  
 ## FSM Diagram:  
